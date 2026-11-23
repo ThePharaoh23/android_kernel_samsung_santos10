@@ -320,6 +320,8 @@ static inline int is_vmalloc_addr(const void *x)
 	return 0;
 #endif
 }
+
+extern void kvfree(const void *addr);
 #ifdef CONFIG_MMU
 extern int is_vmalloc_or_module_addr(const void *x);
 #else
