@@ -382,6 +382,7 @@ KBUILD_CFLAGS += $(call cc-option,-Wno-stringop-truncation)
 KBUILD_CFLAGS += $(call cc-option,-Wno-address-of-packed-member)
 KBUILD_CFLAGS += $(call cc-option,-Wno-format-overflow)
 KBUILD_CFLAGS += $(call cc-option,-Wno-implicit-fallthrough)
+KBUILD_CFLAGS += $(call cc-option,-Wno-error=attributes)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
