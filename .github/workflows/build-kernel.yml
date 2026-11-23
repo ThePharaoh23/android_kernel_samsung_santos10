@@ -12,7 +12,7 @@ on:
       compiler:
         description: 'Compiler to use'
         required: true
-        default: 'aosp-4.9'
+        default: 'gcc-10'
         type: choice
         options:
           - aosp-4.9
@@ -27,7 +27,7 @@ on:
 
 jobs:
   build:
-    name: Build Kernel (${{ github.event.inputs.compiler || 'aosp-4.9' }})
+    name: Build Kernel (${{ github.event.inputs.compiler || 'gcc-10' }})
     runs-on: ubuntu-22.04
 
     steps:
@@ -42,7 +42,7 @@ jobs:
       - name: Setup Compiler
         id: setup-cc
         run: |
-          COMPILER="${{ github.event.inputs.compiler || 'aosp-4.9' }}"
+          COMPILER="${{ github.event.inputs.compiler || 'gcc-10' }}"
           echo "Selected compiler: $COMPILER"
 
           if [ "$COMPILER" = "aosp-4.9" ]; then
@@ -81,6 +81,13 @@ jobs:
             cp arch/x86/boot/bzImage artifacts/bzImage
             echo "SUCCESS: Kernel bzImage built successfully!"
             ls -lh artifacts/bzImage
+
+            # Automatically repack boot.img using the verified stock ramdisk
+            if [ -f tools/ramdisk-los14.1.cpio.lzma ] && [ -f tools/repack_bootimg.py ]; then
+              python3 tools/repack_bootimg.py artifacts/bzImage tools/ramdisk-los14.1.cpio.lzma artifacts/boot.img
+              echo "Flashable boot.img ready:"
+              ls -lh artifacts/boot.img
+            fi
           else
             echo "ERROR: arch/x86/boot/bzImage was not generated!"
           fi
@@ -98,5 +105,5 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: santos10-kernel-${{ github.event.inputs.compiler || 'aosp-4.9' }}-${{ github.run_number }}
+          name: santos10-kernel-${{ github.event.inputs.compiler || 'gcc-10' }}-${{ github.run_number }}
           path: artifacts/
