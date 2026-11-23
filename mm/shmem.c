@@ -2808,3 +2808,40 @@ struct page *shmem_read_mapping_page_gfp(struct address_space *mapping,
 #endif
 }
 EXPORT_SYMBOL_GPL(shmem_read_mapping_page_gfp);
+
+#include <linux/memfd.h>
+#include <linux/syscalls.h>
+
+SYSCALL_DEFINE2(memfd_create,
+		const char __user *, uname,
+		unsigned int, flags)
+{
+	char name[256];
+	struct file *file;
+	int fd, error;
+
+	if (flags & ~(unsigned int)(MFD_CLOEXEC | MFD_ALLOW_SEALING))
+		return -EINVAL;
+
+	error = strncpy_from_user(name, uname, sizeof(name));
+	if (error < 0)
+		return error;
+	if (error >= sizeof(name))
+		return -ENAMETOOLONG;
+
+	fd = get_unused_fd_flags((flags & MFD_CLOEXEC) ? O_CLOEXEC : 0);
+	if (fd < 0)
+		return fd;
+
+	file = shmem_file_setup(name, 0, VM_NORESERVE);
+	if (IS_ERR(file)) {
+		error = PTR_ERR(file);
+		goto err_fd;
+	}
+	fd_install(fd, file);
+	return fd;
+
+err_fd:
+	put_unused_fd(fd);
+	return error;
+}
