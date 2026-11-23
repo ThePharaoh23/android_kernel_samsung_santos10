@@ -371,6 +371,17 @@ KBUILD_CFLAGS   := $(ANDROID_TOOLCHAIN_FLAGS) \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -fno-delete-null-pointer-checks
+
+KBUILD_CFLAGS += $(call cc-option,-std=gnu89)
+KBUILD_CFLAGS += $(call cc-option,-fno-pie)
+KBUILD_CFLAGS += $(call cc-option,-no-pie)
+KBUILD_AFLAGS += $(call cc-option,-fno-pie)
+KBUILD_CFLAGS += $(call cc-option,-Wno-misleading-indentation)
+KBUILD_CFLAGS += $(call cc-option,-Wno-bool-operation)
+KBUILD_CFLAGS += $(call cc-option,-Wno-stringop-truncation)
+KBUILD_CFLAGS += $(call cc-option,-Wno-address-of-packed-member)
+KBUILD_CFLAGS += $(call cc-option,-Wno-format-overflow)
+KBUILD_CFLAGS += $(call cc-option,-Wno-implicit-fallthrough)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
