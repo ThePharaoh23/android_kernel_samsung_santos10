@@ -94,10 +94,32 @@
 #define __maybe_unused			__attribute__((unused))
 #define __always_unused			__attribute__((unused))
 
-#define __gcc_header(x) #x
-#define _gcc_header(x) __gcc_header(linux/compiler-gcc##x.h)
-#define gcc_header(x) _gcc_header(x)
-#include gcc_header(__GNUC__)
+#define GCC_VERSION (__GNUC__ * 10000 \
+		   + __GNUC_MINOR__ * 100 \
+		   + __GNUC_PATCHLEVEL__)
+
+#define __used			__attribute__((__used__))
+#define __must_check 		__attribute__((warn_unused_result))
+#define __compiler_offsetof(a,b) __builtin_offsetof(a,b)
+
+#if GCC_VERSION >= 40300
+#define __cold			__attribute__((__cold__))
+#define __linktime_error(message) __attribute__((__error__(message)))
+#endif
+
+#if GCC_VERSION >= 40500
+#define unreachable() __builtin_unreachable()
+#define __noclone	__attribute__((__noclone__))
+#endif
+
+#if GCC_VERSION >= 40000
+#define __compiletime_object_size(obj) __builtin_object_size(obj, 0)
+#endif
+
+#if GCC_VERSION >= 40400 && !defined(__CHECKER__)
+#define __compiletime_warning(message) __attribute__((warning(message)))
+#define __compiletime_error(message) __attribute__((error(message)))
+#endif
 
 #if !defined(__noclone)
 #define __noclone	/* not needed */
