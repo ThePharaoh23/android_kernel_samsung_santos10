@@ -67,10 +67,11 @@ jobs:
           echo "Configuring kernel with $DEFCONFIG..."
           make ARCH=x86 $MAKE_FLAGS $DEFCONFIG
 
-      - name: Build Kernel (bzImage and modules)
+      - name: Build Kernel (bzImage)
         run: |
+          set -o pipefail
           echo "Starting kernel compilation with $MAKE_FLAGS..."
-          make -j$(nproc) ARCH=x86 $MAKE_FLAGS bzImage modules 2>&1 | tee build.log
+          make -j$(nproc) ARCH=x86 $MAKE_FLAGS bzImage 2>&1 | tee build.log
 
       - name: Package Build Artifacts
         if: always()
@@ -78,8 +79,10 @@ jobs:
           mkdir -p artifacts
           if [ -f arch/x86/boot/bzImage ]; then
             cp arch/x86/boot/bzImage artifacts/bzImage
-            echo "Kernel bzImage built successfully!"
+            echo "SUCCESS: Kernel bzImage built successfully!"
             ls -lh artifacts/bzImage
+          else
+            echo "ERROR: arch/x86/boot/bzImage was not generated!"
           fi
           if [ -f .config ]; then
             cp .config artifacts/kernel.config
@@ -87,13 +90,13 @@ jobs:
           if [ -f build.log ]; then
             cp build.log artifacts/build.log
           fi
-          mkdir -p artifacts/modules
-          find . -name "*.ko" -exec cp {} artifacts/modules/ \; 2>/dev/null || true
-          MODULE_COUNT=$(find artifacts/modules/ -name "*.ko" | wc -l)
-          echo "Collected $MODULE_COUNT kernel modules"
+          if [ ! -f arch/x86/boot/bzImage ]; then
+            exit 1
+          fi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: santos10-kernel-${{ github.event.inputs.compiler || 'aosp-4.9' }}-${{ github.run_number }}
           path: artifacts/
