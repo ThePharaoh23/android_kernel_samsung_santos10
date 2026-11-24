@@ -64,7 +64,9 @@ KBUILD_CFLAGS   := $(ANDROID_TOOLCHAIN_FLAGS) \
 		   $(call cc-option, -fno-toplevel-reorder,\
 		   $(call cc-option, -fno-unit-at-a-time)) \
 		   $(call cc-option, -fno-stack-protector) \
-		   $(call cc-option, -mpreferred-stack-boundary=2)
+		   $(call cc-option, -mpreferred-stack-boundary=2) \
+		   $(call cc-option, -fno-asynchronous-unwind-tables) \
+		   $(call cc-option, -fno-unwind-tables)
 KBUILD_AFLAGS	:= $(KBUILD_CFLAGS) -D__ASSEMBLY__
 GCOV_PROFILE := n
 

@@ -51,12 +51,16 @@ SECTIONS
 	. = ALIGN(16);
 	_end = .;
 
-	/DISCARD/ : { *(.note*) }
+	/DISCARD/ : {
+		*(.note*)
+		*(.eh_frame*)
+	}
 
 	/*
-	 * The ASSERT() sink to . is intentional, for binutils 2.14 compatibility:
+	 * S-BOOT 4.0 on Samsung CloverTrail hardcodes the jump to 0x05003c00.
+	 * This requires setup.bin to never exceed 30 sectors (0x3c00 / 15360 bytes).
 	 */
-	. = ASSERT(_end <= 0x8000, "Setup too big!");
+	. = ASSERT(_end <= 0x3c00, "Setup too big for S-BOOT (exceeds 30 sectors / 0x3c00)!");
 	. = ASSERT(hdr == 0x1f1, "The setup header has the wrong offset!");
 	/* Necessary for the very-old-loader check to work... */
 	. = ASSERT(__end_init <= 5*512, "init sections too big!");

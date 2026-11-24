@@ -71,4 +71,9 @@ SECTIONS
 	}
 #endif
 	_end = .;
+
+	/DISCARD/ : {
+		*(.note*)
+		*(.eh_frame*)
+	}
 }

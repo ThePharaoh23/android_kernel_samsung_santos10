@@ -42,8 +42,8 @@ typedef unsigned int   u32;
 #define DEFAULT_MINOR_ROOT 0
 #define DEFAULT_ROOT_DEV (DEFAULT_MAJOR_ROOT << 8 | DEFAULT_MINOR_ROOT)
 
-/* Minimal number of setup sectors */
-#define SETUP_SECT_MIN 5
+/* Minimal number of setup sectors (S-BOOT requires exactly 30 sectors / 0x3c00 entry) */
+#define SETUP_SECT_MIN 30
 #define SETUP_SECT_MAX 64
 
 /* This must be large enough to hold the entire setup */
@@ -167,6 +167,8 @@ int main(int argc, char ** argv)
 	setup_sectors = (c + 511) / 512;
 	if (setup_sectors < SETUP_SECT_MIN)
 		setup_sectors = SETUP_SECT_MIN;
+	if (setup_sectors > 30)
+		die("Setup is %d sectors (> 30)! S-BOOT requires exactly 30 sectors (0x3c00).", setup_sectors);
 	i = setup_sectors*512;
 	memset(buf+c, 0, i-c);
 
