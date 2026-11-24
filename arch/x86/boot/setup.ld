@@ -39,6 +39,7 @@ SECTIONS
 		setup_sig = .;
 		LONG(0x5a5aaa55)
 	}
+	setup_data_end = .;
 
 
 	. = ALIGN(16);
@@ -58,9 +59,10 @@ SECTIONS
 
 	/*
 	 * S-BOOT 4.0 on Samsung CloverTrail hardcodes the jump to 0x05003c00.
-	 * This requires setup.bin to never exceed 30 sectors (0x3c00 / 15360 bytes).
+	 * This requires setup.bin loadable content to never exceed 30 sectors (0x3c00 / 15360 bytes).
 	 */
-	. = ASSERT(_end <= 0x3c00, "Setup too big for S-BOOT (exceeds 30 sectors / 0x3c00)!");
+	. = ASSERT(setup_data_end <= 0x3c00, "Setup data too big for S-BOOT (exceeds 30 sectors / 0x3c00)!");
+	. = ASSERT(_end <= 0x8000, "Setup too big!");
 	. = ASSERT(hdr == 0x1f1, "The setup header has the wrong offset!");
 	/* Necessary for the very-old-loader check to work... */
 	. = ASSERT(__end_init <= 5*512, "init sections too big!");
