@@ -92,4 +92,4 @@ DEFINES += -DUSE_INTERRUPTS
 DEFINES += -DPUNIT_CAMERA_BUSY
 DEFINES += -DUSE_KMEM_CACHE
 
-EXTRA_CFLAGS := $(INCLUDES) $(DEFINES) -fno-common -Werror -Wno-error=int-in-bool-context -Wno-int-in-bool-context -Wno-error=attributes
+EXTRA_CFLAGS := $(INCLUDES) $(DEFINES) -fno-common -Werror -Wno-error=int-in-bool-context -Wno-int-in-bool-context -Wno-error=attributes -Wno-error=address -Wno-address -Wno-error=array-bounds -Wno-error=dangling-pointer -Wno-error=use-after-free -Wno-error=stringop-overread

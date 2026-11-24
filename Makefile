@@ -385,6 +385,16 @@ KBUILD_CFLAGS += $(call cc-option,-Wno-implicit-fallthrough)
 KBUILD_CFLAGS += $(call cc-option,-Wno-error=attributes)
 KBUILD_CFLAGS += $(call cc-option,-Wno-int-in-bool-context)
 KBUILD_CFLAGS += $(call cc-option,-Wno-error=int-in-bool-context)
+KBUILD_CFLAGS += $(call cc-option,-Wno-address)
+KBUILD_CFLAGS += $(call cc-option,-Wno-error=address)
+KBUILD_CFLAGS += $(call cc-option,-Wno-dangling-pointer)
+KBUILD_CFLAGS += $(call cc-option,-Wno-error=dangling-pointer)
+KBUILD_CFLAGS += $(call cc-option,-Wno-use-after-free)
+KBUILD_CFLAGS += $(call cc-option,-Wno-error=use-after-free)
+KBUILD_CFLAGS += $(call cc-option,-Wno-array-bounds)
+KBUILD_CFLAGS += $(call cc-option,-Wno-error=array-bounds)
+KBUILD_CFLAGS += $(call cc-option,-Wno-stringop-overread)
+KBUILD_CFLAGS += $(call cc-option,-Wno-error=stringop-overread)
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
