@@ -32,6 +32,7 @@
 #include <linux/string.h>
 #include <linux/vmalloc.h>
 #include <linux/err.h>
+#include <linux/cpumask.h>
 
 #include "zram_drv.h"
 
@@ -735,7 +736,7 @@ static void zram_reset_device(struct zram *zram, bool reset_capacity)
 	}
 
 	zcomp_destroy(zram->comp);
-	zram->max_comp_streams = 1;
+	zram->max_comp_streams = num_possible_cpus();
 
 	zram_meta_free(zram->meta);
 	zram->meta = NULL;
@@ -1073,7 +1074,7 @@ static int create_device(struct zram *zram, int device_id)
 	}
 	strlcpy(zram->compressor, default_compressor, sizeof(zram->compressor));
 	zram->meta = NULL;
-	zram->max_comp_streams = 1;
+	zram->max_comp_streams = num_possible_cpus();
 	return 0;
 
 out_free_disk:
