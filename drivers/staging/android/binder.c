@@ -622,7 +622,7 @@ static inline long copy_from_user_preempt_disabled(void *to, const void __user *
 ({						\
 	int __ret;				\
 	preempt_enable_no_resched();		\
-	__ret = get_user(x, ptr);		\
+	__ret = copy_from_user(&(x), (ptr), sizeof(*(ptr))) ? -EFAULT : 0; \
 	preempt_disable();			\
 	__ret;					\
 })
