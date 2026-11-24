@@ -33,6 +33,9 @@ enum {
 	Opt_multiuser, // May need?
 	Opt_userid,
 	Opt_reserved_mb,
+	Opt_gid_derivation,
+	Opt_default_normal,
+	Opt_unshared_obb,
 	Opt_err,
 };
 
@@ -45,6 +48,9 @@ static const match_table_t sdcardfs_tokens = {
 	{Opt_userid, "userid=%d"},
 	{Opt_multiuser, "multiuser"},
 	{Opt_reserved_mb, "reserved_mb=%u"},
+	{Opt_gid_derivation, "derive_gid"},
+	{Opt_default_normal, "default_normal"},
+	{Opt_unshared_obb, "unshared_obb"},
 	{Opt_err, NULL}
 };
 
@@ -113,6 +119,11 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 			if (match_int(&args[0], &option))
 				return 0;
 			opts->reserved_mb = option;
+			break;
+		case Opt_gid_derivation:
+		case Opt_default_normal:
+		case Opt_unshared_obb:
+			/* accepted for Android 8.1 Oreo vold mount options */
 			break;
 		/* unknown option */
 		default:
