@@ -1068,10 +1068,10 @@ static void mxt_treat_T6_object(struct mxt_data *data,
 		dev_dbg(&data->client->dev, "Normal mode\n");
 	/* I2C checksum error */
 	if (message->message[0] & 0x04)
-		dev_err_ratelimited(&data->client->dev, "I2C checksum error\n");
+		dev_err(&data->client->dev, "I2C checksum error\n");
 	/* Config error */
 	if (message->message[0] & 0x08)
-		dev_err_ratelimited(&data->client->dev, "Config error\n");
+		dev_err(&data->client->dev, "Config error\n");
 	/* Calibration */
 	if (message->message[0] & 0x10) {
 		dev_dbg(&data->client->dev, "Calibration is on going !!\n");
@@ -1081,10 +1081,10 @@ static void mxt_treat_T6_object(struct mxt_data *data,
 		data->cal_is_ongoing = 0;
 	/* Signal error */
 	if (message->message[0] & 0x20)
-		dev_err_ratelimited(&data->client->dev, "Signal error\n");
+		dev_err(&data->client->dev, "Signal error\n");
 	/* Overflow */
 	if (message->message[0] & 0x40)
-		dev_err_ratelimited(&data->client->dev, "Overflow detected\n");
+		pr_err_ratelimited("mxt1188s_ts: Overflow detected\n");
 	/* Reset */
 	if (message->message[0] & 0x80) {
 		dev_dbg(&data->client->dev, "Reset is ongoing\n");
