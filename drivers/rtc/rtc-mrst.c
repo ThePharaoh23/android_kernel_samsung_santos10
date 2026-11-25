@@ -469,9 +469,13 @@ vrtc_mrst_do_probe(struct device *dev, struct resource *iomem, int rtc_irq)
 	mrst_rtc.dev = dev;
 	dev_set_drvdata(dev, &mrst_rtc);
 
+	/* Mark wakeup capability before rtc_device_register so class interfaces (alarmtimer) see it */
+	device_init_wakeup(dev, true);
+
 	mrst_rtc.rtc = rtc_device_register(driver_name, dev,
 				&mrst_rtc_ops, THIS_MODULE);
 	if (IS_ERR(mrst_rtc.rtc)) {
+		device_init_wakeup(dev, false);
 		retval = PTR_ERR(mrst_rtc.rtc);
 		goto cleanup0;
 	}
@@ -496,9 +500,6 @@ vrtc_mrst_do_probe(struct device *dev, struct resource *iomem, int rtc_irq)
 			goto cleanup1;
 		}
 	}
-
-	/* make RTC device wake capable from sleep */
-	device_init_wakeup(dev, true);
 
 	if ((__intel_mid_cpu_chip == INTEL_MID_CPU_CHIP_PENWELL) ||
 	    (__intel_mid_cpu_chip == INTEL_MID_CPU_CHIP_CLOVERVIEW)) {
