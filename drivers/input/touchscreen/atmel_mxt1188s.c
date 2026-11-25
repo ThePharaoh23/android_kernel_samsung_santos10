@@ -1065,29 +1065,29 @@ static void mxt_treat_T6_object(struct mxt_data *data,
 {
 	/* Normal mode */
 	if (message->message[0] == 0x00)
-		dev_info(&data->client->dev, "Normal mode\n");
+		dev_dbg(&data->client->dev, "Normal mode\n");
 	/* I2C checksum error */
 	if (message->message[0] & 0x04)
-		dev_err(&data->client->dev, "I2C checksum error\n");
+		dev_err_ratelimited(&data->client->dev, "I2C checksum error\n");
 	/* Config error */
 	if (message->message[0] & 0x08)
-		dev_err(&data->client->dev, "Config error\n");
+		dev_err_ratelimited(&data->client->dev, "Config error\n");
 	/* Calibration */
 	if (message->message[0] & 0x10) {
-		dev_info(&data->client->dev, "Calibration is on going !!\n");
+		dev_dbg(&data->client->dev, "Calibration is on going !!\n");
 		mxt_atch_check_calibration(data);
 		data->cal_is_ongoing = 1;
 	} else
 		data->cal_is_ongoing = 0;
 	/* Signal error */
 	if (message->message[0] & 0x20)
-		dev_err(&data->client->dev, "Signal error\n");
+		dev_err_ratelimited(&data->client->dev, "Signal error\n");
 	/* Overflow */
 	if (message->message[0] & 0x40)
-		dev_err(&data->client->dev, "Overflow detected\n");
+		dev_err_ratelimited(&data->client->dev, "Overflow detected\n");
 	/* Reset */
 	if (message->message[0] & 0x80) {
-		dev_info(&data->client->dev, "Reset is ongoing\n");
+		dev_dbg(&data->client->dev, "Reset is ongoing\n");
 		data->atch.prev_chargin_status = 0xff;
 		mxt_atch_check_calibration(data);
 	}
@@ -1221,10 +1221,10 @@ static void mxt_treat_T42_object(struct mxt_data *data,
 {
 	if (message->message[0] & 0x01)
 		/* Palm Press */
-		dev_info(&data->client->dev, "palm touch detected\n");
+		dev_dbg(&data->client->dev, "palm touch detected\n");
 	else
 		/* Palm release */
-		dev_info(&data->client->dev, "palm touch released\n");
+		dev_dbg(&data->client->dev, "palm touch released\n");
 }
 
 static int mxt_command_calibration(struct mxt_data *data)
