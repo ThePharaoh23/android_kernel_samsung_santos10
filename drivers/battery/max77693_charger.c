@@ -23,8 +23,8 @@
 
 #define RECOVERY_DELAY		3000
 #define RECOVERY_CNT		5
-#define REDUCE_CURRENT_STEP	40
-#define MINIMUM_INPUT_CURRENT	200
+#define REDUCE_CURRENT_STEP	20
+#define MINIMUM_INPUT_CURRENT	100
 
 struct max77693_charger_data {
 	struct max77693_dev	*max77693;
@@ -471,7 +471,8 @@ static void max77693_recovery_work(struct work_struct *work)
 
 	wake_unlock(&chg_data->recovery_wake_lock);
 	if ((!chg_data->is_charging) || mutex_is_locked(&chg_data->ops_lock) ||
-			(chg_data->cable_type != POWER_SUPPLY_TYPE_MAINS))
+			(chg_data->cable_type == POWER_SUPPLY_TYPE_BATTERY) ||
+			(chg_data->cable_type == POWER_SUPPLY_TYPE_WIRELESS))
 		return;
 	max77693_read_reg(chg_data->max77693->regmap,
 				MAX77693_CHG_REG_CHG_DETAILS_00, &dtls_00);
@@ -491,7 +492,7 @@ static void max77693_recovery_work(struct work_struct *work)
 		(chgin_dtls == 0x3) && (chg_dtls != 0x8) &&
 		(byp_dtls == 0x0))) {
 		cur_ma = max77693_get_input_current(chg_data);
-		next_ma = min_t(int, cur_ma + 100,
+		next_ma = min_t(int, cur_ma + 60,
 				chg_data->charging_current_max);
 		pr_info("%s: try to recovery (%d -> %d), cnt(%d)\n", __func__,
 				cur_ma, next_ma,
@@ -525,6 +526,7 @@ static void reduce_input_current(struct max77693_charger_data *charger, int cur)
 {
 	u8 set_reg;
 	u8 set_value;
+	bool reduced = false;
 
 	if ((!charger->is_charging) || mutex_is_locked(&charger->ops_lock) ||
 			(charger->cable_type == POWER_SUPPLY_TYPE_WIRELESS))
@@ -534,16 +536,21 @@ static void reduce_input_current(struct max77693_charger_data *charger, int cur)
 				set_reg, &set_value)) {
 		if ((set_value <= (MINIMUM_INPUT_CURRENT / 20)) ||
 		    (set_value <= (cur / 20)))
-			return;
+			goto schedule_recovery;
 		set_value -= (cur / 20);
 		set_value = (set_value < (MINIMUM_INPUT_CURRENT / 20)) ?
 			(MINIMUM_INPUT_CURRENT / 20) : set_value;
 		max77693_write_reg(charger->max77693->regmap,
 				set_reg, set_value);
+		reduced = true;
 		pr_info("%s: set current: reg:(0x%x), val:(0x%x)\n",
 				__func__, set_reg, set_value);
 	}
-	if (charger->cable_type == POWER_SUPPLY_TYPE_MAINS) {
+schedule_recovery:
+	if (charger->cable_type != POWER_SUPPLY_TYPE_WIRELESS &&
+	    charger->cable_type != POWER_SUPPLY_TYPE_BATTERY &&
+	    charger->soft_reg_recovery_cnt < RECOVERY_CNT &&
+	    (reduced || !delayed_work_pending(&charger->recovery_work))) {
 		/* schedule softreg recovery wq */
 		cancel_delayed_work_sync(&charger->recovery_work);
 		wake_lock(&charger->recovery_wake_lock);
@@ -569,19 +576,19 @@ static int max77693_get_vbus_state(struct max77693_charger_data *charger)
 
 	switch (reg_data) {
 	case 0x00:
-		pr_info("%s: VBUS is invalid. CHGIN < CHGIN_UVLO\n",
+		pr_info_ratelimited("%s: VBUS is invalid. CHGIN < CHGIN_UVLO\n",
 			__func__);
 		break;
 	case 0x01:
-		pr_info("%s: VBUS is invalid. CHGIN < MBAT+CHGIN2SYS" \
+		pr_info_ratelimited("%s: VBUS is invalid. CHGIN < MBAT+CHGIN2SYS" \
 			"and CHGIN > CHGIN_UVLO\n", __func__);
 		break;
 	case 0x02:
-		pr_info("%s: VBUS is invalid. CHGIN > CHGIN_OVLO",
+		pr_info_ratelimited("%s: VBUS is invalid. CHGIN > CHGIN_OVLO",
 			__func__);
 		break;
 	case 0x03:
-		pr_info("%s: VBUS is valid. CHGIN < CHGIN_OVLO", __func__);
+		pr_info_ratelimited("%s: VBUS is valid. CHGIN < CHGIN_OVLO", __func__);
 		break;
 	default:
 		break;
@@ -633,6 +640,7 @@ static int max77693_get_health_state(struct max77693_charger_data *charger)
 	int state;
 	int vbus_state;
 	int chg_state;
+	int cur_ma, next_ma;
 	u8 reg_data;
 
 	max77693_read_reg(charger->max77693->regmap,
@@ -688,9 +696,26 @@ static int max77693_get_health_state(struct max77693_charger_data *charger)
 			state = POWER_SUPPLY_HEALTH_UNDERVOLTAGE;
 		} else if (charger->is_charging &&
 				charger->cable_type != POWER_SUPPLY_TYPE_WIRELESS &&
-				((vbus_state == 0x00) || (vbus_state == 0x01)) &&
-				(chg_state == POWER_SUPPLY_STATUS_CHARGING)) {
-			reduce_input_current(charger, REDUCE_CURRENT_STEP);
+				charger->cable_type != POWER_SUPPLY_TYPE_BATTERY) {
+			if (((vbus_state == 0x00) || (vbus_state == 0x01)) &&
+					(chg_state == POWER_SUPPLY_STATUS_CHARGING)) {
+				reduce_input_current(charger, REDUCE_CURRENT_STEP);
+			} else if ((vbus_state == 0x03) &&
+					((chg_state == POWER_SUPPLY_STATUS_CHARGING) ||
+					 (chg_state == POWER_SUPPLY_STATUS_FULL)) &&
+					(charger->soft_reg_recovery_cnt < RECOVERY_CNT)) {
+				cur_ma = max77693_get_input_current(charger);
+				if ((cur_ma > 0) &&
+						(cur_ma < (int)charger->charging_current_max)) {
+					next_ma = min_t(int, cur_ma + 40,
+							charger->charging_current_max);
+					pr_info("%s: recover input current (%d -> %d)\n",
+							__func__, cur_ma, next_ma);
+					max77693_set_input_current(charger, next_ma);
+					if (max77693_get_input_current(charger) < next_ma)
+						charger->soft_reg_recovery_cnt++;
+				}
+			}
 		}
 	}
 
@@ -1161,7 +1186,7 @@ static irqreturn_t max77693_bypass_irq(int irq, void *data)
 	u8 chg_cnfg_00;
 	u8 vbus_state;
 
-	pr_info("%s: irq(%d)\n", __func__, irq);
+	pr_info_ratelimited("%s: irq(%d)\n", __func__, irq);
 
 	/* check and unlock */
 	check_charger_unlock_state(chg_data);
@@ -1172,7 +1197,7 @@ static irqreturn_t max77693_bypass_irq(int irq, void *data)
 
 	byp_dtls = ((dtls_02 & MAX77693_BYP_DTLS) >>
 				MAX77693_BYP_DTLS_SHIFT);
-	pr_info("%s: BYP_DTLS(0x%02x)\n", __func__, byp_dtls);
+	pr_info_ratelimited("%s: BYP_DTLS(0x%02x)\n", __func__, byp_dtls);
 	vbus_state = max77693_get_vbus_state(chg_data);
 
 	if (byp_dtls & 0x1) {
