@@ -26,6 +26,7 @@
 #include <linux/firmware.h>
 #include <linux/string.h>
 #include <linux/printk.h>
+#include <linux/ratelimit.h>
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
