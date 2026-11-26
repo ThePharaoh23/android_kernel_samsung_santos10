@@ -14,6 +14,7 @@
 //#include <linux/mfd/max77693-private.h>
 #include <linux/battery/charger/max77693_charger.h>
 #include <linux/irqdomain.h>
+#include <linux/ratelimit.h>
 
 #define DEBUG
 
