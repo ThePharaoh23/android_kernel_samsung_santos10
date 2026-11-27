@@ -1098,6 +1098,7 @@ static void mxt_treat_T6_object(struct mxt_data *data,
 		dev_dbg(&data->client->dev, "Reset is ongoing\n");
 		data->atch.prev_chargin_status = 0xff;
 		atomic_set(&data->ta_pending_status, -1);
+		mxt_release_all_finger(data);
 		mxt_atch_check_calibration(data);
 	}
 }
@@ -1310,7 +1311,7 @@ static void mxt_treat_T57_object(struct mxt_data *data,
 				/* Battery Mode Overflow Recovery */
 				if (!data->atch.prev_chargin_status) {
 					mxt_write_object(data,
-						MXT_GEN_POWERCONFIG_T7, 1, 8);
+						MXT_GEN_POWERCONFIG_T7, 1, 12);
 					mxt_write_object(data,
 						MXT_SPT_CTECONFIG_T46, 2, 8);
 					mxt_write_object(data,
@@ -1492,7 +1493,7 @@ static void mxt_treat_T61_object(struct mxt_data *data,
 		data->atch.bigpalm_enable = 1;
 		if (!data->atch.prev_chargin_status) {
 			mxt_write_object(data, MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70, 0, 3);
-			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 8);
+			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
 			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 8);
 			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 10);
 			mxt_write_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T9, 7, 45);
@@ -1513,7 +1514,7 @@ static void mxt_treat_T61_object(struct mxt_data *data,
 						MXT_T61_TIMER_CMD_START,
 						data->atch.calgood_time * 1000);
 		if (!data->atch.prev_chargin_status)
-			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 8);
+			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
 		data->atch.calgood = 1;
 	}
 }
@@ -1541,7 +1542,7 @@ static void mxt_ta_config_work_func(struct work_struct *work)
 		mxt_write_object(data,
 			MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
 			1, 0);
-		mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 255);
+		mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
 		mxt_write_object(data,
 			MXT_PROCG_NOISESUPPRESSION_T62, 3, 8);
 		dev_dbg(&data->client->dev, "T46 TA config write\n");
@@ -1552,7 +1553,7 @@ static void mxt_ta_config_work_func(struct work_struct *work)
 		mxt_write_object(data,
 			MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
 			1, 7);
-		mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 8);
+		mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
 		mxt_write_object(data, MXT_PROCG_NOISESUPPRESSION_T62,
 			3, 24);
 		dev_dbg(&data->client->dev, "T46 BATT config write\n");
@@ -2462,7 +2463,7 @@ static irqreturn_t mxt_irq_thread(int irq, void *ptr)
 	do {
 		if (unlikely(mxt_read_message(data, &message))) {
 			dev_err(dev, "Failed to read message\n");
-			goto end;
+			break;
 		}
 #if defined(CONFIG_TOUCHSCREEN_ATMEL_DEBUG)
 		if (data->atmeldbg.display_log)
@@ -2471,13 +2472,13 @@ static irqreturn_t mxt_irq_thread(int irq, void *ptr)
 				false);
 #endif
 		if (message.reportid > data->max_reportid)
-			goto end;
+			break;
 
 		type = data->reportids[message.reportid].type;
 
 		switch (type) {
 		case MXT_RESERVED_T0:
-			goto end;
+			type = 0xff;
 			break;
 		case MXT_GEN_COMMANDPROCESSOR_T6:
 			mxt_treat_T6_object(data, &message);
@@ -2516,12 +2517,13 @@ static irqreturn_t mxt_irq_thread(int irq, void *ptr)
 				message.message[5], message.message[6]);
 			break;
 		}
+		if (type == 0xff)
+			break;
 	} while (!gpio_get_value(data->pdata->gpio_irq));
 
 	if (data->finger_mask)
 		mxt_report_input_data(data);
 
-end:
 	return IRQ_HANDLED;
 }
 
