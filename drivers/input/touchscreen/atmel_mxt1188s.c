@@ -1059,10 +1059,29 @@ void mxt_atch_init(struct mxt_data *data)
 
 		data->atch.prev_chargin_status = 0xff;
 		atomic_set(&data->ta_pending_status, -1);
-		data->atch.enable = 1;
+		data->atch.enable = 0;
 
 		data->atch.gstylus_diff = GHOST_STYLUS;
 	}
+}
+
+static void mxt_apply_stable_config(struct mxt_data *data)
+{
+	if (!data->objects)
+		return;
+
+	/*
+	 * T62 noise-suppression enters an endless T62->T70->T6 calibration
+	 * and T5 FIFO overflow storm on this panel; keep T62 disabled and
+	 * restore stable drift/power/touchkey defaults after init and resume.
+	 */
+	mxt_write_object(data, MXT_PROCG_NOISESUPPRESSION_T62, 0, 0);
+	mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
+	mxt_write_object(data, MXT_GEN_ACQUISITIONCONFIG_T8, 2, 5);
+	mxt_write_object(data, MXT_GEN_ACQUISITIONCONFIG_T8, 3, 10);
+	mxt_write_object(data, MXT_TOUCH_KEYARRAY_T15, 0, 135);
+	mxt_write_object(data, MXT_PROCI_EXTRATOUCHSCREENDATA_T57, 1, 0);
+	mxt_write_object(data, MXT_PROCI_LENSBENDING_T65, 0, 0);
 }
 
 /* The Command Processor T6 object allows commands to be sent to the device.
@@ -2082,6 +2101,7 @@ static int mxt_initialize(struct mxt_data *data)
 	}
 
 	mxt_atch_init(data);
+	mxt_apply_stable_config(data);
 
 	return 0;
 
@@ -2113,6 +2133,7 @@ static int mxt_power_on(struct mxt_data *data)
 		dev_err(&data->client->dev, "Not respond after H/W reset\n");
 
 	data->mxt_enabled = true;
+	mxt_apply_stable_config(data);
 	dev_info(&data->client->dev, "Power on\n");
 out:
 	return error;
