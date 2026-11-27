@@ -68,3 +68,11 @@ static inline void rtc_sysfs_del_device(struct rtc_device *rtc)
 }
 
 #endif
+
+#ifdef CONFIG_RTC_HCTOSYS
+extern void rtc_hctosys_device_registered(struct rtc_device *rtc);
+#else
+static inline void rtc_hctosys_device_registered(struct rtc_device *rtc)
+{
+}
+#endif

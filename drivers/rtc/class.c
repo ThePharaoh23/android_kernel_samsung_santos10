@@ -199,6 +199,7 @@ struct rtc_device *rtc_device_register(const char *name, struct device *dev,
 	}
 
 	rtc_dev_add_device(rtc);
+	rtc_hctosys_device_registered(rtc);
 	rtc_sysfs_add_device(rtc);
 	rtc_proc_add_device(rtc);
 

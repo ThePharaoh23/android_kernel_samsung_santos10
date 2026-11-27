@@ -24,34 +24,26 @@
 
 int rtc_hctosys_ret = -ENODEV;
 
-static int __init rtc_hctosys(void)
+static int rtc_hctosys_sync(struct rtc_device *rtc)
 {
-	int err = -ENODEV;
+	int err;
 	struct rtc_time tm;
 	struct timespec tv = {
 		.tv_nsec = NSEC_PER_SEC >> 1,
 	};
-	struct rtc_device *rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
-
-	if (rtc == NULL) {
-		pr_err("%s: unable to open rtc device (%s)\n",
-			__FILE__, CONFIG_RTC_HCTOSYS_DEVICE);
-		goto err_open;
-	}
 
 	err = rtc_read_time(rtc, &tm);
 	if (err) {
 		dev_err(rtc->dev.parent,
 			"hctosys: unable to read the hardware clock\n");
-		goto err_read;
-
+		return err;
 	}
 
 	err = rtc_valid_tm(&tm);
 	if (err) {
 		dev_err(rtc->dev.parent,
 			"hctosys: invalid date/time\n");
-		goto err_invalid;
+		return err;
 	}
 
 	rtc_tm_to_time(&tm, &tv.tv_sec);
@@ -65,8 +57,36 @@ static int __init rtc_hctosys(void)
 		tm.tm_hour, tm.tm_min, tm.tm_sec,
 		(unsigned int) tv.tv_sec);
 
-err_invalid:
-err_read:
+	return 0;
+}
+
+void rtc_hctosys_device_registered(struct rtc_device *rtc)
+{
+	if (rtc_hctosys_ret == 0)
+		return;
+
+	if (strcmp(dev_name(&rtc->dev), CONFIG_RTC_HCTOSYS_DEVICE) != 0)
+		return;
+
+	rtc_hctosys_ret = rtc_hctosys_sync(rtc);
+}
+
+static int __init rtc_hctosys(void)
+{
+	int err = -ENODEV;
+	struct rtc_device *rtc;
+
+	if (rtc_hctosys_ret == 0)
+		return 0;
+
+	rtc = rtc_class_open(CONFIG_RTC_HCTOSYS_DEVICE);
+	if (rtc == NULL) {
+		pr_err("%s: unable to open rtc device (%s)\n",
+			__FILE__, CONFIG_RTC_HCTOSYS_DEVICE);
+		goto err_open;
+	}
+
+	err = rtc_hctosys_sync(rtc);
 	rtc_class_close(rtc);
 
 err_open:
