@@ -27,6 +27,7 @@
 #include <linux/string.h>
 #include <linux/printk.h>
 #include <linux/ratelimit.h>
+#include <linux/workqueue.h>
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
@@ -372,6 +373,8 @@ struct mxt_data {
 	atomic_t large_keys;
 	atomic_t light_on_touch;
 	atomic_t bl_timeout;
+	struct delayed_work		ta_config_work;
+	atomic_t			ta_pending_status;
 };
 
 #if defined(CONFIG_TOUCHSCREEN_ATMEL_DEBUG)
@@ -433,15 +436,18 @@ static void set_keyled_power(bool on, struct mxt_data *data) {
 static int mxt_wait_for_chg(struct mxt_data *data, u16 time)
 {
 	int timeout_counter = 0;
+	unsigned int step_ms = time ? MXT_RESET_INTEVAL_TIME : 10;
 
-	msleep(time);
+	if (time)
+		msleep(time);
 	while (gpio_get_value(data->pdata->gpio_irq)
-						&& timeout_counter++ <= 20) {
-		msleep(MXT_RESET_INTEVAL_TIME);
-		dev_err(&data->client->dev,
-			"Spend %d time waiting for chg_high\n",
-			(MXT_RESET_INTEVAL_TIME * timeout_counter) + time);
-	}
+						&& timeout_counter++ < 20)
+		msleep(step_ms);
+
+	if (gpio_get_value(data->pdata->gpio_irq))
+		dev_dbg(&data->client->dev,
+			"Timeout (%u ms) waiting for /CHG low\n",
+			(step_ms * timeout_counter) + time);
 
 	return 0;
 }
@@ -1052,6 +1058,7 @@ void mxt_atch_init(struct mxt_data *data)
 		data->atch.big_tch_atch_min = buf[13+offset]; /*8 */
 
 		data->atch.prev_chargin_status = 0xff;
+		atomic_set(&data->ta_pending_status, -1);
 		data->atch.enable = 1;
 
 		data->atch.gstylus_diff = GHOST_STYLUS;
@@ -1090,6 +1097,7 @@ static void mxt_treat_T6_object(struct mxt_data *data,
 	if (message->message[0] & 0x80) {
 		dev_dbg(&data->client->dev, "Reset is ongoing\n");
 		data->atch.prev_chargin_status = 0xff;
+		atomic_set(&data->ta_pending_status, -1);
 		mxt_atch_check_calibration(data);
 	}
 }
@@ -1302,7 +1310,7 @@ static void mxt_treat_T57_object(struct mxt_data *data,
 				/* Battery Mode Overflow Recovery */
 				if (!data->atch.prev_chargin_status) {
 					mxt_write_object(data,
-						MXT_GEN_POWERCONFIG_T7, 1, 12);
+						MXT_GEN_POWERCONFIG_T7, 1, 8);
 					mxt_write_object(data,
 						MXT_SPT_CTECONFIG_T46, 2, 8);
 					mxt_write_object(data,
@@ -1484,7 +1492,7 @@ static void mxt_treat_T61_object(struct mxt_data *data,
 		data->atch.bigpalm_enable = 1;
 		if (!data->atch.prev_chargin_status) {
 			mxt_write_object(data, MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70, 0, 3);
-			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
+			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 8);
 			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 8);
 			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 10);
 			mxt_write_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T9, 7, 45);
@@ -1505,9 +1513,61 @@ static void mxt_treat_T61_object(struct mxt_data *data,
 						MXT_T61_TIMER_CMD_START,
 						data->atch.calgood_time * 1000);
 		if (!data->atch.prev_chargin_status)
-			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
+			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 8);
 		data->atch.calgood = 1;
 	}
+}
+
+static void mxt_ta_config_work_func(struct work_struct *work)
+{
+	struct mxt_data *data = container_of(work, struct mxt_data,
+						ta_config_work.work);
+	int chargin_status;
+
+	if (!data->mxt_enabled)
+		return;
+
+	chargin_status = atomic_read(&data->ta_pending_status);
+	if (chargin_status < 0 ||
+			data->atch.prev_chargin_status == chargin_status)
+		return;
+
+	if (chargin_status) {
+		mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 16);
+		mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 28);
+		mxt_write_object(data,
+			MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
+			0, 0);
+		mxt_write_object(data,
+			MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
+			1, 0);
+		mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 255);
+		mxt_write_object(data,
+			MXT_PROCG_NOISESUPPRESSION_T62, 3, 8);
+		dev_dbg(&data->client->dev, "T46 TA config write\n");
+	} else {
+		mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 8);
+		mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 10);
+		mxt_write_object(data, 77, 0, 5);
+		mxt_write_object(data,
+			MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
+			1, 7);
+		mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 8);
+		mxt_write_object(data, MXT_PROCG_NOISESUPPRESSION_T62,
+			3, 24);
+		dev_dbg(&data->client->dev, "T46 BATT config write\n");
+	}
+	mxt_write_object(data, MXT_GEN_ACQUISITIONCONFIG_T8, 8, 10);
+	mxt_write_object(data, MXT_GEN_ACQUISITIONCONFIG_T8, 9, 1);
+	mxt_write_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T9, 8, 2);
+	mxt_write_object(data, MXT_PROCI_STYLUS_T47, 8, 3);
+	mxt_write_object(data, MXT_TOUCH_KEYARRAY_T15, 0, 135);
+	data->atch.prev_chargin_status = chargin_status;
+
+	if (data->mxt_enabled &&
+			atomic_read(&data->ta_pending_status) != chargin_status)
+		schedule_delayed_work(&data->ta_config_work,
+					msecs_to_jiffies(20));
 }
 
 static void mxt_treat_T62_object(struct mxt_data *data,
@@ -1524,38 +1584,10 @@ static void mxt_treat_T62_object(struct mxt_data *data,
 		dev_dbg(&data->client->dev, "Charger Input pin OFF\n");
 	}
 
-	if (data->atch.prev_chargin_status != chargin_status) {
-		if (chargin_status) {
-			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 16);
-			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 28);
-			mxt_write_object(data,
-				MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
-				0, 0);
-			mxt_write_object(data,
-				MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
-				1, 0);
-			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 255);
-			mxt_write_object(data,
-			MXT_PROCG_NOISESUPPRESSION_T62, 3, 8);
-			dev_info(&data->client->dev, "T46 TA config write\n");
-		} else {
-			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 8);
-			mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 10);
-			mxt_write_object(data, 77, 0, 5);
-			mxt_write_object(data,
-				MXT_SPT_DYNAMICCONFIGURATIONCONTROLLER_T70 + 7,
-				1, 7);
-			mxt_write_object(data, MXT_GEN_POWERCONFIG_T7, 1, 12);
-			mxt_write_object(data, MXT_PROCG_NOISESUPPRESSION_T62,
-				3, 24);
-			dev_dbg(&data->client->dev, "T46 BATT config write\n");
-		}
-		mxt_write_object(data, MXT_GEN_ACQUISITIONCONFIG_T8, 8, 10);
-		mxt_write_object(data, MXT_GEN_ACQUISITIONCONFIG_T8, 9, 1);
-		mxt_write_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T9, 8, 2);
-		mxt_write_object(data, MXT_PROCI_STYLUS_T47, 8, 3);
-		mxt_write_object(data, MXT_TOUCH_KEYARRAY_T15, 0, 135);
-		data->atch.prev_chargin_status = chargin_status;
+	if (atomic_read(&data->ta_pending_status) != chargin_status) {
+		atomic_set(&data->ta_pending_status, chargin_status);
+		schedule_delayed_work(&data->ta_config_work,
+					msecs_to_jiffies(20));
 	}
 }
 
@@ -2075,7 +2107,7 @@ static int mxt_power_on(struct mxt_data *data)
 	}
 
 	data->pdata->set_power(true);
-	error = mxt_wait_for_chg(data, MXT_HW_RESET_TIME);
+	error = mxt_wait_for_chg(data, 0);
 	if (error)
 		dev_err(&data->client->dev, "Not respond after H/W reset\n");
 
@@ -2137,6 +2169,9 @@ static int mxt_stop(struct mxt_data *data)
 		return error;
 	}
 	disable_irq(data->client->irq);
+	cancel_delayed_work_sync(&data->ta_config_work);
+	data->atch.prev_chargin_status = 0xff;
+	atomic_set(&data->ta_pending_status, -1);
 
 	error = mxt_power_off(data);
 	if (error) {
@@ -3942,10 +3977,12 @@ static ssize_t enabled_store(struct device *dev,
 	sscanf(buf, "%d", &val);
 	val = (val == 0 ? 0 : 1);
 
+	mutex_lock(&ts_data->input_dev->mutex);
 	if (val == 0)
 		mxt_stop(ts_data);
 	else
 		mxt_start(ts_data);
+	mutex_unlock(&ts_data->input_dev->mutex);
 
 	return count;
 }
@@ -4147,6 +4184,8 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	atomic_set(&data->large_keys, 1);
 	atomic_set(&data->light_on_touch, 0);
 	atomic_set(&data->bl_timeout, 1500);
+	INIT_DELAYED_WORK(&data->ta_config_work, mxt_ta_config_work_func);
+	atomic_set(&data->ta_pending_status, -1);
 
 	if (data->pdata->key_size > 0) {
 		set_bit(EV_KEY, input_dev->evbit);
@@ -4302,6 +4341,7 @@ static int __devexit mxt_remove(struct i2c_client *client)
 	unregister_early_suspend(&data->early_suspend);
 #endif
 	free_irq(client->irq, data);
+	cancel_delayed_work_sync(&data->ta_config_work);
 	kfree(data->objects);
 	kfree(data->reportids);
 	input_unregister_device(data->input_dev);
